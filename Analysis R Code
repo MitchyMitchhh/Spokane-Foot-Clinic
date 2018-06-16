@@ -1,0 +1,197 @@
+---
+title: "Northwest Surgery Center"
+output: 
+  html_document:
+    theme: cerulean
+    code_folding: hide
+---
+
+<script type="text/javascript">
+ function showhide(id) {
+    var e = document.getElementById(id);
+    e.style.display = (e.style.display == 'block') ? 'none' : 'block';
+ }
+</script>
+
+```{r, include=FALSE}
+# Be sure to use your file menus at the top of R-Studio to:
+# "Session -> Set working directory -> To source file location"
+# Then play this chunk and the next one to get the data into R.
+library(mosaic)
+library(car)
+library(DT)
+library(pander)
+library(readr)
+library(plotly)
+library(pander)
+library(ggplot2)
+sc <- read_csv("../Data/SurgeryCenter.csv")
+```
+
+## Background 
+
+This data was provided by Northwest Surgery Center - Spokane Foot Clinic. The data uses variables called "Disperse" (The amount of money given out to the three different doctors after the overhead expenses) "Collection" (the amount of money received before overhead expenses are paid) and the month at which the collection and dispersal was recorded. This data was taken over the course of 24 months, March 2016 through February 2018. The months were also split into the four yearly quarters, for later use during the tests.
+
+##### <a href="javascript:showhide('uniquename')">The Data <span style="font-size:8pt;">(click to view)</span></a>
+
+
+<div id="uniquename" style="display:none;">
+
+```{r}
+knitr::kable(sc)
+```
+
+</div>
+
+December 2017 and June 2016 were both excluded for the experiment because of unforeseen factors that resulted in outlying and corrupt data.
+
+```{r}
+sc <- sc[sc$Overhead >= 0, ]
+```
+
+***
+This analysis will be broken up into two different parts. The first part is a linear regression model that analyses the relationship between collection and dispersal. The second part being an ANOVA test comparing yearly quarters to the amount of dispersal the center received.  
+
+## {.tabset .tabset-pills .tabset-fade}
+
+### Linear Regression
+
+#### Question
+
+Does a higher collection amount have a positive correlation on the amount of dispersal handed out to the doctors, if so how much does it affect?
+
+#### Hypothesis
+
+With this experiment we assume that our null hypothesis is true and the slope of our regression (beta 1) is equal to or close enough to 0. That means that we assume we will end up with a flat trend line, unless our P value tells us differently. If our P value is significant (less than our alpha of .05) then we can safely reject our null hypothesis and accept our alternative hypothesis that our slope is not equal to 0. 
+
+$$
+  H_0: \beta_1 = 0
+$$
+
+$$
+ H_a: \beta_1 \neq 0
+$$
+
+$$
+\alpha = 0.05
+$$
+
+#### Data Graphics and Statistics
+
+```{r}
+ggplot(sc, aes(y=Disperse, x=Collection))+geom_point()+ 
+  geom_smooth(method='lm', se = FALSE)
+```
+
+```{r}
+sc.lm <- lm(Disperse ~ Collection, data=sc)
+pander(summary(sc.lm))
+```
+
+#### Interpretation
+
+Based off our significant "Collection" P value of 1.636e-07, we reject our null hypothesis and we accept our alternate hypothesis that states our slope is different from 0. We then can see that our slope is equal to 0.4932, which means we have a positive increasing slope. Using this slope, we know that for every 1.00 dollar of collection the surgery center receives, the dispersal for the doctors will be roughly 0.49 cents. 
+
+Additionally, using this regression we can predict future dispersal amounts based off how much collection the center receives. The equation would be Y (predicted dispersal) = -2311 (intercept) + 0.4932 (slope) X (amount of collection.) For example, if we wanted to predict how much dispersal there would be if the center collected 100,000 dollars, our equation would be Y = -2311 + 0.4932 * 100,000. This results in Y = 47,009. To put this is words, in this example, if the surgery center was to collect 100,000 dollars, on average, the disperse amount would be 47,009 dollars.   
+
+#### Appropriateness
+
+At this point our data has done its job, we now want to see how reliable of a job it did. We will do this by checking for data normality, linear relation and if there is constant variance. We will check all of that by using these plots below:
+
+```{r}
+par(mfrow=c(1,3))
+plot(sc.lm, which=1:2)
+plot(sc.lm$residuals, main="Residuals vs Order", xlab="",
+     ylab="Residuals")
+```
+
+
+
+Overall, the experiment/test seems appropriate, but not perfect. We see that from the Residual vs Fitted graph that the regression isn’t entirely linear. To better visualize this, I made this graph with a line of best fit to showcase its linearity. Notice that it's not as straight as it could potentially be.
+
+```{r}
+plot(sc$Disperse ~sc$Collection, ylab="Dispersal", xlab="Collection", main="Line of Best Fit for the Regression", col = "dark green", pch=16)
+lines(lowess(sc$Disperse ~ sc$Collection))
+```
+
+
+Next, we look at the Q-Q plot. The plot shows us that the data is mostly normal, except for an abnormal tail at the start. This is a bit strange, but I think if we were to have more data observations the data would become more normalized.
+
+Finally, the Residuals vs Order plot doesn’t really show any clear patterns. This is a good sign and tells us that there is relatively strong evidence that our constant variance assumption does not appear to be violated.
+
+When considering the appropriateness of this experiment you should take in account multiple different factors that could be influencing our data. Some of these factors being:
+
+1.	Overhead never stays the same from month to month. For example, maybe surgical equipment needs to be repaired, or the center needs to order new equipment.
+2.	A billing person may be on vacation so the collections can lag from the normal amounts.
+3.	Sometimes insurance companies delay paying the surgeons (i.e. Until the new year because they are low on funds.
+4.	A glitch in a computer system.
+5.	Insurance companies changes their surgical codes or implementing a new coding system.
+6.	Etc.
+
+
+
+### Yearly Quarter Summaries
+
+```{r}
+sc$Q <- cut(sc$MonthN, c(0,3,6,9,12), c("1st Q", "2nd Q", "3rd Q", "4th Q"))
+```
+
+#### Question
+
+Which quarter of the year yields the highest dispersal for the Northwest Surgery Center?[^1]
+
+#### Hypothesis
+
+$$
+H_0: The~amount~of~dispersal~is~the~same~for~all~of~the~yearly~quarters.
+$$
+$$
+  H_a: The~amount~of~dispersal~is~not~the~same~for~all~of~the~yearly~quarters.
+$$
+$$
+  \alpha = 0.05
+$$
+
+#### Analysis
+
+```{r warning=FALSE}
+p <- plot_ly(sc, x = ~Q, y = ~Disperse, color = ~Q, type = "box") %>%
+  layout(boxmode = "group")%>%
+  layout(yaxis = list(title = 'Dispersal'), xaxis = list(title ='Quarter'))   %>%
+  layout(title = "Box Plot")
+p
+
+pander(favstats(Disperse ~ Q, data = sc))
+```
+
+```{r}
+sc.aov <- aov(Disperse ~ Q, data=sc)
+```
+
+```{r}
+pander(summary(sc.aov))
+```
+
+#### Interpretation
+
+Our P value (0.07944) is insignificant, which means we fail to reject our null hypothesis. This states that neither of the quarters are stochastically different enough from each other to provide a strong conclusive argument that the quarters are significantly different. That being said, it's still a fairly small P value and by looking at our graphic and means [^2] alone we can see that 1st quarter, brought in the highest dispersal of 20400 dollars for each month on average during that quarter. Additionally, the lowest quarter's mean was the 3rd quarter at 12400 dollars. In a future experiment/test you could dive deeper into the factors that influence the discrepancy of the different means for the highest and lowest quarters. This could potentially reveal some useful information as to how to boost dispersals over the course of all the quarters.  
+
+#### Appropriateness
+
+Now to test to see how normal our data is. 
+
+```{r}
+par(mfrow=c(1,2))
+plot(sc.aov, which=1)
+plot(sc.aov, which=2)
+#qqPlot(sc.aov)
+```
+
+The data seems mostly appropriate. The Residuals vs Fitted plot shows that the data's constant variance isn't too violated. The Q-Q Plot shows that the data is normal, except for what looks like 4 different big outliers. Overall, the data checks out well enough.  
+
+[^1]: The 1st quarter consists of January, February, March.
+      The 2nd quarter consists of April, May, June.
+      The 3rd quarter consists of July, August, September.
+      The 4th quarter consists of October, November, December.
+
+[^2]: It's important to note that the mean statistic isn't calculating the total dispersal brought in during that specific quarter (3 months combined.) Instead, its referring to the average month's dispersal in that designated quarter.
